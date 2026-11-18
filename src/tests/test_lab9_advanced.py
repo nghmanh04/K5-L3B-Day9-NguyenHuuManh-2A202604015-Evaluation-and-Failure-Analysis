@@ -53,6 +53,18 @@ def test_integrity_flags_nan_and_dropped_rows():
     assert gate.integrity_check(dropped, base, SPEC)
 
 
+def test_integrity_flags_duplicate_trial_and_evaluator_failure():
+    from lab9 import gate
+
+    base = _report(copy.deepcopy(ROWS), {"pass_rate": 1.0})
+    duplicated = _report([*ROWS[:-1], ROWS[0]], {"pass_rate": 1.0})
+    assert any("duplicate" in problem for problem in gate.integrity_check(duplicated, base, SPEC))
+
+    errored = copy.deepcopy(base)
+    errored["evaluator_failures"] = ["E-000@1:TrialPass:error"]
+    assert any("evaluator_failures" in problem for problem in gate.integrity_check(errored, base, SPEC))
+
+
 def test_integrity_flags_loosened_spec():
     from lab9 import gate
 
