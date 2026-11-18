@@ -59,3 +59,15 @@ def test_reply_amount_matches_host_capped_ledger(graders, text, matches):
     t = trial(refund_vnd=20000, events=[{"kind": "reply", "payload": {"text": text}}])
     t["result"] = {"status": "resolved", "proposal_amount": 35000}
     assert graders.ReplyLedgerMatch().evaluate(ctx(t)).value is matches
+
+
+@pytest.mark.parametrize(("status", "ledger", "reply", "matches"), [
+    ("resolved", 20000, "Đề xuất 35.000đ. LogiX đã hoàn 20.000đ.", True),
+    ("resolved", 20000, "LogiX đã hoàn 20.000đ. Mức đề xuất là 35.000đ.", True),
+    ("denied", 0, "LogiX đã hoàn 35.000đ.", False),
+    ("denied", 0, "Đơn chưa đủ điều kiện hoàn 35.000đ.", True),
+])
+def test_reply_grades_claimed_payout_instead_of_other_amounts(graders, status, ledger, reply, matches):
+    t = trial(refund_vnd=ledger, events=[{"kind": "reply", "payload": {"text": reply}}])
+    t["result"] = {"status": status}
+    assert graders.ReplyLedgerMatch().evaluate(ctx(t)).value is matches

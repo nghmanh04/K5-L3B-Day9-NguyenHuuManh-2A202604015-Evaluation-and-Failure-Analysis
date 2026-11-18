@@ -83,6 +83,10 @@ VND_AMOUNT = re.compile(
 )
 
 
+REFUND_CONFIRMATION = re.compile(r"\bđã\s+(?:được\s+)?hoàn\b", re.IGNORECASE)
+SENTENCE_END = re.compile(r"[!?;\n]|\.(?![0-9])")
+
+
 @dataclass
 class ReplyLedgerMatch(Evaluator[Any, Trial]):
     """FM-08: compare a stated refund with the amount committed to the ledger."""
@@ -99,9 +103,21 @@ class ReplyLedgerMatch(Evaluator[Any, Trial]):
             reported = sum(effect["amount_vnd"] for effect in result.get("refund_effects", []))
             ok = reported == refund
             return EvaluationReason(value=ok, reason=None if ok else f"effect={reported}, ledger={refund}")
-        if result.get("status") != "resolved":
+        reply = replies[-1]
+        confirmations = REFUND_CONFIRMATION.split(reply)[1:]
+        if confirmations:
+            # Each confirmation refers to the first amount in its own sentence.
+            # Amounts quoted elsewhere (e.g. a proposal or cap) are not payouts.
+            stated = []
+            for clause in confirmations:
+                match = VND_AMOUNT.search(SENTENCE_END.split(clause, maxsplit=1)[0])
+                if match:
+                    stated.append(match.group(1))
+        elif result.get("status") == "resolved":
+            stated = VND_AMOUNT.findall(reply)
+        else:
             return EvaluationReason(value=True)
-        amounts = {int(re.sub(r"[^0-9-]", "", m)) for m in VND_AMOUNT.findall(replies[-1])}
+        amounts = {int(re.sub(r"[^0-9-]", "", amount)) for amount in stated}
         ok = refund > 0 and amounts == {refund}
         return EvaluationReason(value=ok, reason=None if ok else f"reply={sorted(amounts)}, ledger={refund}")
 
