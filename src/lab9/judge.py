@@ -22,6 +22,8 @@ def calibrate(path: Path) -> dict:
     rows = list(csv.DictReader(path.open(encoding="utf-8")))
     human = [r["human"].strip().upper() for r in rows]
     judge = [r["judge"].strip().upper() for r in rows]
+    if not rows:
+        raise ValueError("calibration CSV has no rows")
     p, r = stats.precision_recall(human, judge)
     try:
         k = stats.cohen_kappa(human, judge)
@@ -30,11 +32,15 @@ def calibrate(path: Path) -> dict:
     cm = stats.confusion(human, judge)
     spec = cm["tn"] / (cm["tn"] + cm["fp"]) if cm["tn"] + cm["fp"] else 0.0
     obs = (cm["tp"] + cm["fp"]) / len(rows)
-    res = {"n": len(rows), "precision": round(p, 3), "recall": round(r, 3), "kappa": round(k, 3),
-           "confusion": cm, "observed_fail_rate": round(obs, 3),
-           "corrected_fail_rate": round(stats.rogan_gladen(obs, r, spec), 3),
-           "disagreements": [x for x, h, j in zip(rows, human, judge) if h != j]}
-    res["passed"] = all(res[m] >= f for m, f in FLOORS.items())   # nan compares False -> fails
+    try:
+        corrected = round(stats.rogan_gladen(obs, r, spec), 3)
+    except ValueError:
+        corrected = None
+    measurements = {"precision": p, "recall": r, "kappa": k}
+    res = {"n": len(rows), **{name: round(value, 3) for name, value in measurements.items()},
+           "confusion": cm, "observed_fail_rate": round(obs, 3), "corrected_fail_rate": corrected,
+           "disagreements": [x for x, h, j in zip(rows, human, judge, strict=True) if h != j]}
+    res["passed"] = all(measurements[m] >= floor for m, floor in FLOORS.items())
     return res
 
 
