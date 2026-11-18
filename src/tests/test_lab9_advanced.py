@@ -75,6 +75,28 @@ def test_integrity_flags_loosened_spec():
     assert gate.integrity_check(base, base, SPEC, SPEC) == []
 
 
+@pytest.mark.parametrize(("key", "value"), [("min", math.nan), ("max", math.inf)])
+def test_integrity_flags_nonfinite_gate_threshold(key, value):
+    from lab9 import gate
+
+    report = _report(copy.deepcopy(ROWS), {"pass_rate": 1.0})
+    spec = copy.deepcopy(SPEC)
+    spec["metrics"][0]["threshold"][key] = value
+    blocked, lines = gate.check(report, report, spec, SPEC)
+    assert blocked == ["integrity"]
+    assert any(f"threshold {key} must be a finite number" in line for line in lines)
+
+
+def test_integrity_flags_nonfinite_slice_threshold():
+    from lab9 import gate
+
+    report = _report(copy.deepcopy(ROWS), {"pass_rate": 1.0})
+    spec = dict(SPEC, slices=[{"name": "denial", "metric": "pass_rate", "min": math.nan, "blocking": True}])
+    blocked, lines = gate.check(report, report, spec)
+    assert blocked == ["integrity"]
+    assert any("slice:denial/pass_rate: threshold min" in line for line in lines)
+
+
 def test_slice_check_blocks_a_slice_below_floor():
     from lab9 import gate
 

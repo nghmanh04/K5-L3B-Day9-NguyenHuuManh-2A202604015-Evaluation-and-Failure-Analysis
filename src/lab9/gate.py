@@ -73,6 +73,20 @@ def _report_problems(report: dict, spec: dict) -> tuple[list[str], dict]:
     return problems, slices
 
 
+def _threshold_problems(spec: dict) -> list[str]:
+    thresholds = [(metric["id"], metric.get("threshold", {})) for metric in spec["metrics"]]
+    thresholds.extend((f"slice:{s['name']}/{s['metric']}", s) for s in spec.get("slices", []))
+    problems = []
+    for metric, threshold in thresholds:
+        for key in ("min", "max", "max_increase"):
+            if key not in threshold:
+                continue
+            value = threshold[key]
+            if type(value) is not int and not (isinstance(value, float) and isfinite(value)):
+                problems.append(f"{metric}: threshold {key} must be a finite number")
+    return problems
+
+
 def _ratchet(current: dict, previous: dict, *, slices: bool = False) -> list[str]:
     problems = []
     for key, old in previous.items():
@@ -96,7 +110,13 @@ def _ratchet(current: dict, previous: dict, *, slices: bool = False) -> list[str
 
 def integrity_check(pr: dict, base: dict, spec: dict, base_spec: dict | None = None) -> list[str]:
     """Validate case coverage, evaluator scores, slice membership and policy ratchets."""
+    problems = [f"spec: {problem}" for problem in _threshold_problems(spec)]
     comparable_spec = (base_spec is not None and spec["eval_set_version"] == base_spec["eval_set_version"])
+    if comparable_spec:
+        problems.extend(f"base spec: {problem}" for problem in _threshold_problems(base_spec))
+    if problems:
+        return problems
+
     pr_problems, pr_slices = _report_problems(pr, spec)
     base_problems, base_slices = _report_problems(base, base_spec if comparable_spec else spec)
     problems = [f"PR: {problem}" for problem in pr_problems]
